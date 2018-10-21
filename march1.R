@@ -6,13 +6,13 @@ library(ggplot2)
 setwd("~/march")
 
 #read data from google drive
-options(httr_oob_default = TRUE) 
-drive_auth() 
-
-drive_download("out_tab_MBB_2018.csv", path = "out_tab_MBB_2018.csv", overwrite = TRUE)
-drive_download("ANOVA_tab_MBB_2018.csv", path = "ANOVA_tab_MBB_2018.csv", overwrite = TRUE)
-drive_download("data_NCAA_1985_2018_men.csv", path = "data_NCAA_1985_2018_men.csv", overwrite = TRUE)
-drive_download("automaticQualifiers.csv", path = "automaticQualifiers.csv", overwrite = TRUE)
+# options(httr_oob_default = TRUE) 
+# drive_auth() 
+# 
+# drive_download("out_tab_MBB_2018.csv", path = "out_tab_MBB_2018.csv", overwrite = TRUE)
+# drive_download("ANOVA_tab_MBB_2018.csv", path = "ANOVA_tab_MBB_2018.csv", overwrite = TRUE)
+# drive_download("data_NCAA_1985_2018_men.csv", path = "data_NCAA_1985_2018_men.csv", overwrite = TRUE)
+# drive_download("automaticQualifiers.csv", path = "automaticQualifiers.csv", overwrite = TRUE)
 
 dat_beta_m <- read.csv("out_tab_MBB_2018.csv")
 dat_ncaa_m <- read.csv("data_NCAA_1985_2018_men.csv")
@@ -51,6 +51,17 @@ dat_sigma2_m$Year <- gsub(") Residual", "", dat_sigma2_m$Year)
 dat_sigma2_m$Sigma <- sqrt(dat_sigma2_m$MS)
 dat_sigma2_m <- data.frame(Year = as.character(dat_sigma2_m$Year), Sigma = dat_sigma2_m$Sigma)
 
+#output summary of results for first round seed matchups
+out_rd1_smry_by_year_and_seed <- dat_ncaa_m %>%
+  filter(Round == 1) %>%
+  group_by(Year, Seed1, Seed2) %>%
+  summarise(winsSeed1 = sum(Win1), winsSeed2 = sum(Win2)) %>% 
+  as.data.frame()
+
+write.csv(out_rd1_smry_by_year_and_seed, file = "smry_rd1_wins_by_year_and_seed.csv")
+drive_auth()
+drive_upload("smry_rd1_wins_by_year_and_seed.csv")
+
 #create new ncaa team table
 dat_ncaa_m_teams <- rbind(dat_ncaa_m %>% 
                             filter(Round == 1) %>% 
@@ -67,8 +78,9 @@ dat_ncaa_m_teams <- rbind(dat_ncaa_m %>%
 ) %>%
   merge(dat_beta_m, by.x = c("Year", "Name"), by.y = c("Year", "Team")) %>%
   merge(dat_aq[dat_aq$Gender == "M",], by.x = c("Year", "Name"), by.y = c("Year", "Team"), all.x = TRUE) %>%
+  dplyr::mutate(beta_hca = beta + ifelse(Seed <= 4, HCA, 0)) %>%
   dplyr::mutate(AQ = ifelse(Year %in% unique(dat_aq$Year), ifelse(is.na(X.y), 0, 1), NA)) %>%
-  dplyr::select(Year, Region:Group3, Seed, Name, beta, AQ) %>%
+  dplyr::select(Year, Region:Group3, Seed, Name, beta, HCA, beta_hca, AQ) %>%
   arrange(Year, Region, Group1, Group2, Group3, Seed)
 
 a1 <- dat_ncaa_m_teams %>% group_by(Year) %>% dplyr::summarise(AQ = sum(AQ)) %>% as.data.frame()
@@ -83,47 +95,113 @@ dat_ncaa_m_rd1 <- merge(dat_ncaa_m_teams, dat_ncaa_m_teams, by = c("Year", "Regi
   merge(dat_sigma2_m, by = "Year") %>%
   mutate(Round = 1,
          ProbWinCond = pnorm((beta.x - beta.y) / Sigma),
+         ProbWinCond_circ = pnorm((beta_hca.x - beta_hca.y) / Sigma),
          ProbReach = 1,
-         ProbReachOpp = 1) %>%
+         ProbReach_circ = 1,
+         ProbReachOpp = 1,
+         ProbReachOpp_circ = 1) %>%
   dplyr::rename(Seed = Seed.x,
                 Name = Name.x,
                 beta = beta.x,
+                beta_circ = beta_hca.x,
                 SeedOpp = Seed.y,
                 NameOpp = Name.y,
-                betaOpp = beta.y) %>%
-  mutate(ProbMatchup = ProbReach * ProbReachOpp) %>%
-  mutate(ProbWinJoint = ProbWinCond * ProbMatchup) %>%
+                betaOpp = beta.y,
+                betaOpp_circ = beta_hca.y) %>%
+  mutate(ProbMatchup = ProbReach * ProbReachOpp,
+         ProbMatchup_circ = ProbReach_circ * ProbReachOpp_circ) %>%
+  mutate(ProbWinJoint = ProbWinCond * ProbMatchup,
+         ProbWinJoint_circ = ProbWinCond_circ * ProbMatchup_circ) %>%
   dplyr::select(Year, Sigma, Region:Group3, Round, Seed, Name, 
-                ProbReach, beta, SeedOpp, NameOpp, ProbReachOpp, betaOpp, 
-                ProbMatchup, ProbWinCond, ProbWinJoint) %>%
+                ProbReach, ProbReach_circ, beta, beta_circ, SeedOpp, NameOpp, 
+                ProbReachOpp, ProbReachOpp_circ, betaOpp, betaOpp_circ, 
+                ProbMatchup, ProbMatchup_circ, ProbWinCond, ProbWinCond_circ, 
+                ProbWinJoint, ProbWinJoint_circ) %>%
   arrange(Year, Region, Group1, Group2, Group3, Seed)
 
 dat_ncaa_m_rd2 <- merge(dat_ncaa_m_teams, dat_ncaa_m_teams, by = c("Year", "Region", "Group1", "Group2")) %>% 
   filter(Group3.x != Group3.y) %>%
   merge(dat_sigma2_m, by = "Year") %>%
   mutate(Round = 2,
-         ProbWinCond = pnorm((beta.x - beta.y) / Sigma)) %>%
+         ProbWinCond = pnorm((beta.x - beta.y) / Sigma),
+         ProbWinCond_circ = pnorm((beta_hca.x - beta_hca.y) / Sigma)) %>%
   dplyr::rename(Group3 = Group3.x,
                 Seed = Seed.x,
                 Name = Name.x,
                 beta = beta.x,
+                beta_circ = beta_hca.x,
                 SeedOpp = Seed.y,
                 NameOpp = Name.y,
-                betaOpp = beta.y) %>%
+                betaOpp = beta.y,
+                betaOpp_circ = beta_hca.y) %>%
   merge(dat_ncaa_m_rd1 %>%
-          dplyr::select(Year, Name, ProbWinJoint), 
+          dplyr::select(Year, Name, ProbWinJoint, ProbWinJoint_circ), 
         by = c("Year", "Name")) %>%
-  dplyr::rename(ProbReach = ProbWinJoint) %>%
+  dplyr::rename(ProbReach = ProbWinJoint,
+                ProbReach_circ = ProbWinJoint_circ) %>%
   merge(dat_ncaa_m_rd1 %>%
-          dplyr::select(Year, Name, ProbWinJoint), 
+          dplyr::select(Year, Name, ProbWinJoint, ProbWinJoint_circ), 
         by.x = c("Year", "NameOpp"), by.y = c("Year", "Name")) %>%
-  dplyr::rename(ProbReachOpp = ProbWinJoint) %>%
-  mutate(ProbMatchup = ProbReach * ProbReachOpp) %>%
-  mutate(ProbWinJoint = ProbWinCond * ProbMatchup) %>%
+  dplyr::rename(ProbReachOpp = ProbWinJoint,
+                ProbReachOpp_circ = ProbWinJoint_circ) %>%
+  mutate(ProbMatchup = ProbReach * ProbReachOpp,
+         ProbMatchup_circ = ProbReach_circ * ProbReachOpp_circ) %>%
+  mutate(ProbWinJoint = ProbWinCond * ProbMatchup,
+         ProbWinJoint_circ = ProbWinCond_circ * ProbMatchup_circ) %>%
   dplyr::select(Year, Sigma, Region:Group3, Round, Seed, Name, 
-                ProbReach, beta, SeedOpp, NameOpp, ProbReachOpp, betaOpp, 
-                ProbMatchup, ProbWinCond, ProbWinJoint) %>%
+                ProbReach, ProbReach_circ, beta, beta_circ, SeedOpp, NameOpp, 
+                ProbReachOpp, ProbReachOpp_circ, betaOpp, betaOpp_circ, 
+                ProbMatchup, ProbMatchup_circ, ProbWinCond, ProbWinCond_circ, 
+                ProbWinJoint, ProbWinJoint_circ) %>%
   arrange(Year, Region, Group1, Group2, Group3, Seed)
+
+dat_ncaa_m_prob_16 <- rbind(dat_ncaa_m_rd1, 
+                         dat_ncaa_m_rd2) %>%
+  group_by(Year, Region, Seed, Name, beta, Round) %>%
+  dplyr::summarise(ProbWin = sum(ProbWinJoint)) %>%
+  spread(Round, ProbWin) %>%
+  as.data.frame()
+
+dat_ncaa_m_prob_16_circ <- rbind(dat_ncaa_m_rd1, 
+                            dat_ncaa_m_rd2) %>%
+  group_by(Year, Region, Seed, Name, beta_circ, Round) %>%
+  dplyr::summarise(ProbWin_circ = sum(ProbWinJoint_circ)) %>%
+  spread(Round, ProbWin_circ) %>%
+  as.data.frame()
+
+dat_ncaa_m_prob_16_final <- dat_ncaa_m_prob_16 %>%
+  inner_join(dat_ncaa_m_prob_16_circ, by = c("Year", "Region", "Seed", "Name")) %>%
+  as.data.frame()
+
+names(dat_ncaa_m_prob_16_final)[5:10] <- c("beta", "Rd1", "Rd2", "beta_circ", "Rd1_circ", "Rd2_circ")
+
+
+dat_ncaa_m_prob_16_by_seed <- rbind(dat_ncaa_m_rd1, 
+                                 dat_ncaa_m_rd2) %>%
+  group_by(Year, Region, Seed, Name, beta, Round) %>%
+  dplyr::summarise(ProbWin = sum(ProbWinJoint)) %>%
+  group_by(Seed, Round) %>%
+  dplyr::summarise(ProbWin = mean(ProbWin)) %>%
+  spread(Round, ProbWin) %>%
+  as.data.frame()
+
+dat_ncaa_m_prob_16_circ_by_seed <- rbind(dat_ncaa_m_rd1, 
+                                    dat_ncaa_m_rd2) %>%
+  group_by(Year, Region, Seed, Name, beta_circ, Round) %>%
+  dplyr::summarise(ProbWin_circ = sum(ProbWinJoint_circ)) %>%
+  group_by(Seed, Round) %>%
+  dplyr::summarise(ProbWin_circ = mean(ProbWin_circ)) %>%
+  spread(Round, ProbWin_circ) %>%
+  as.data.frame()
+
+dat_ncaa_m_prob_16_final_by_seed <- dat_ncaa_m_prob_16_by_seed %>%
+  inner_join(dat_ncaa_m_prob_16_circ_by_seed, by = c("Seed")) %>%
+  as.data.frame()
+
+names(dat_ncaa_m_prob_16_final_by_seed) <- c("Seed", "Rd1", "Rd2", "Rd1_circ", "Rd2_circ")
+
+write.csv(dat_ncaa_m_prob_16_final_by_seed, file = men_smry_16_by_seed_circ.csv)
+
 
 dat_ncaa_m_rd3 <- merge(dat_ncaa_m_teams, dat_ncaa_m_teams, by = c("Year", "Region", "Group1")) %>% 
   filter(Group2.x != Group2.y) %>%
@@ -597,7 +675,7 @@ ggplot(dat_m_smry_plot, aes(x = Seed, y = Prob, group = Model)) + geom_line(aes(
 
 
 #############################################################
-
+drive_auth()
 drive_upload("probwin_men.png")
 drive_upload("men_smry_by_seed.csv")
 drive_upload("probwin_women.png")
