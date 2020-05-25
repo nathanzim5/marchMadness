@@ -1,23 +1,15 @@
-library(googledrive)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
 
-setwd("~/march")
+setwd("C:\\Users\\User\\Desktop\\ncaa")
 
-#read data from google drive
-# options(httr_oob_default = TRUE) 
-# drive_auth() 
-# 
-# drive_download("out_tab_MBB_2018.csv", path = "out_tab_MBB_2018.csv", overwrite = TRUE)
-# drive_download("ANOVA_tab_MBB_2018.csv", path = "ANOVA_tab_MBB_2018.csv", overwrite = TRUE)
-# drive_download("data_NCAA_1985_2018_men.csv", path = "data_NCAA_1985_2018_men.csv", overwrite = TRUE)
-# drive_download("automaticQualifiers.csv", path = "automaticQualifiers.csv", overwrite = TRUE)
-
-dat_beta_m <- read.csv("out_tab_MBB_2018.csv")
-dat_ncaa_m <- read.csv("data_NCAA_1985_2018_men.csv")
-dat_sigma_m <- read.csv("ANOVA_tab_MBB_2018.csv")
+dat_beta_m <- read.csv("NCAA_Basketball_HCA_Analysis-master\\Men\\Output\\out_tab_MBB_2019.csv")
+dat_ncaa_m <- read.csv("data_NCAA_1985_2019_men.csv")
+dat_sigma_m <- read.csv("NCAA_Basketball_HCA_Analysis-master\\Men\\Output\\ANOVA_tab_MBB_2019.csv")
 dat_aq <- read.csv("automaticQualifiers.csv")
+
+names(dat_aq)[1] <- "X"
 
 #add year column to beta data
 dat_beta_m$Year <- as.numeric(gsub("....-", "", dat_beta_m$Season))
@@ -59,8 +51,15 @@ out_rd1_smry_by_year_and_seed <- dat_ncaa_m %>%
   as.data.frame()
 
 write.csv(out_rd1_smry_by_year_and_seed, file = "smry_rd1_wins_by_year_and_seed.csv")
-drive_auth()
-drive_upload("smry_rd1_wins_by_year_and_seed.csv")
+
+#output summary of results for second round seed matchups
+out_rd2_smry_by_year_and_seed <- dat_ncaa_m %>%
+  filter(Round == 2) %>%
+  group_by(Year, Seed1, Seed2) %>%
+  summarise(winsSeed1 = sum(Win1), winsSeed2 = sum(Win2)) %>% 
+  as.data.frame()
+
+write.csv(out_rd2_smry_by_year_and_seed, file = "smry_rd2_wins_by_year_and_seed.csv")
 
 #create new ncaa team table
 dat_ncaa_m_teams <- rbind(dat_ncaa_m %>% 
@@ -200,7 +199,7 @@ dat_ncaa_m_prob_16_final_by_seed <- dat_ncaa_m_prob_16_by_seed %>%
 
 names(dat_ncaa_m_prob_16_final_by_seed) <- c("Seed", "Rd1", "Rd2", "Rd1_circ", "Rd2_circ")
 
-write.csv(dat_ncaa_m_prob_16_final_by_seed, file = men_smry_16_by_seed_circ.csv)
+write.csv(dat_ncaa_m_prob_16_final_by_seed, file = "men_smry_16_by_seed_circ.csv")
 
 
 dat_ncaa_m_rd3 <- merge(dat_ncaa_m_teams, dat_ncaa_m_teams, by = c("Year", "Region", "Group1")) %>% 
@@ -264,8 +263,16 @@ dat_ncaa_m_rd4 <- merge(dat_ncaa_m_teams, dat_ncaa_m_teams, by = c("Year", "Regi
                 ProbMatchup, ProbWinCond, ProbWinJoint) %>%
   arrange(Year, Region, Group1, Group2, Group3, Seed)
 
-dat_ncaa_m_prob <- rbind(dat_ncaa_m_rd1, 
-                         dat_ncaa_m_rd2,
+dat_ncaa_m_prob <- rbind(dat_ncaa_m_rd1[,c("Year", "Sigma", "Region", "Group1",      
+                                           "Group2", "Group3", "Round", "Seed",        
+                                           "Name", "ProbReach", "beta", "SeedOpp",     
+                                           "NameOpp", "ProbReachOpp", "betaOpp", "ProbMatchup", 
+                                           "ProbWinCond", "ProbWinJoint")], 
+                         dat_ncaa_m_rd2[,c("Year", "Sigma", "Region", "Group1",      
+                                           "Group2", "Group3", "Round", "Seed",        
+                                           "Name", "ProbReach", "beta", "SeedOpp",     
+                                           "NameOpp", "ProbReachOpp", "betaOpp", "ProbMatchup", 
+                                           "ProbWinCond", "ProbWinJoint")],
                          dat_ncaa_m_rd3,
                          dat_ncaa_m_rd4) %>%
   group_by(Year, Region, Seed, Name, beta, Round) %>%
@@ -274,8 +281,16 @@ dat_ncaa_m_prob <- rbind(dat_ncaa_m_rd1,
   as.data.frame()
 names(dat_ncaa_m_prob)[6:9] <- paste("Rd", names(dat_ncaa_m_prob)[6:9], sep = "")
 
-dat_ncaa_m_prob_by_seed <- rbind(dat_ncaa_m_rd1, 
-                                 dat_ncaa_m_rd2,
+dat_ncaa_m_prob_by_seed <- rbind(dat_ncaa_m_rd1[,c("Year", "Sigma", "Region", "Group1",      
+                                                   "Group2", "Group3", "Round", "Seed",        
+                                                   "Name", "ProbReach", "beta", "SeedOpp",     
+                                                   "NameOpp", "ProbReachOpp", "betaOpp", "ProbMatchup", 
+                                                   "ProbWinCond", "ProbWinJoint")], 
+                                 dat_ncaa_m_rd2[,c("Year", "Sigma", "Region", "Group1",      
+                                                   "Group2", "Group3", "Round", "Seed",        
+                                                   "Name", "ProbReach", "beta", "SeedOpp",     
+                                                   "NameOpp", "ProbReachOpp", "betaOpp", "ProbMatchup", 
+                                                   "ProbWinCond", "ProbWinJoint")],
                                  dat_ncaa_m_rd3,
                                  dat_ncaa_m_rd4) %>%
   group_by(Year, Region, Seed, Name, beta, Round) %>%
@@ -314,6 +329,134 @@ dat_ncaa_m_results_by_seed <- dat_ncaa_m_results %>%
   spread(Round, PercWin, fill = 0) %>%
   as.data.frame()
 names(dat_ncaa_m_results_by_seed)[2:7] <- paste("Rd", names(dat_ncaa_m_results_by_seed)[2:7], sep = "")
+
+##########check team strengh model for various second round matchups#########
+
+t1 <- dat_ncaa_m_rd1 %>%
+  group_by(Year, Region, Seed, Name, SeedOpp, NameOpp) %>%
+  dplyr::summarise(ProbWin = sum(ProbWinCond)) %>%
+  group_by(Seed, SeedOpp) %>%
+  dplyr::summarise(ProbWinSeed1 = mean(ProbWin)) %>%
+  filter(Seed < SeedOpp) %>%
+  as.data.frame()
+
+tt1 <- dat_ncaa_m %>%
+  filter(Round == 1) %>%
+  group_by(Seed1, Seed2) %>%
+  summarise(N = n(), winsSeed1 = sum(Win1), winsSeed2 = sum(Win2)) %>% 
+  mutate(ActualWin = winsSeed1 / (winsSeed1 + winsSeed2)) %>%
+  as.data.frame()
+
+ttt1 <- merge(tt1, t1, by.y = c("Seed", "SeedOpp"), by.x = c("Seed1", "Seed2"))
+
+t2 <- dat_ncaa_m_rd2 %>%
+  group_by(Year, Region, Seed, Name, SeedOpp, NameOpp) %>%
+  dplyr::summarise(ProbWin = sum(ProbWinCond)) %>%
+  group_by(Seed, SeedOpp) %>%
+  dplyr::summarise(ProbWinSeed1 = mean(ProbWin)) %>%
+  filter(Seed < SeedOpp) %>%
+  as.data.frame()
+
+tt2 <- dat_ncaa_m %>%
+  filter(Round == 2) %>%
+  group_by(Seed1, Seed2) %>%
+  summarise(N = n(), winsSeed1 = sum(Win1), winsSeed2 = sum(Win2)) %>%
+  as.data.frame()
+
+for(i in 1:length(tt2[,1])) {
+  if(tt2$Seed1[i] > tt2$Seed2[i]) {
+    a1 <- tt2$Seed1[i]
+    a2 <- tt2$Seed2[i]
+    b1 <- tt2$winsSeed1[i]
+    b2 <- tt2$winsSeed2[i]
+    tt2$Seed1[i] <- a2
+    tt2$Seed2[i] <- a1
+    tt2$winsSeed1[i] <- b2
+    tt2$winsSeed2[i] <- b1
+  }
+}
+
+tt2 <- rbind(tt2, data.frame(Seed1 = 8, Seed2 = 16, N = 0, winsSeed1 = 0,
+                             winsSeed2 = 0)) %>%
+  mutate(ActualWin = winsSeed1 / (winsSeed1 + winsSeed2)) %>%
+  as.data.frame()
+
+ttt2 <- merge(tt2, t2, by.y = c("Seed", "SeedOpp"), by.x = c("Seed1", "Seed2")) %>%
+  arrange(Seed1)
+
+write.csv(ttt1, file = "rd1_matchups_actual_vs_probwin.csv", row.names = FALSE)
+write.csv(ttt2, file = "rd2_matchups_actual_vs_probwin.csv", row.names = FALSE)
+
+#put lower seed first always
+
+#code for counting matchups
+u1 <- dat_ncaa_m
+
+for(i in 1:length(u1[,1])) {
+  if(u1$Seed1[i] > u1$Seed2[i]) {
+    a1 <- u1$Seed1[i]
+    a2 <- u1$Seed2[i]
+    b1 <- u1$Name1[i]
+    b2 <- u1$Name2[i]
+    c1 <- u1$Win1[i]
+    c2 <- u1$Win2[i]
+    u1$Seed1[i] <- a2
+    u1$Seed2[i] <- a1
+    u1$Name1[i] <- b2
+    u1$Name2[i] <- b1
+    u1$Win1[i] <- c2
+    u1$Win2[i] <- c1
+  }
+}
+
+u2 <- merge(u1, dat_beta_m[, c("Year", "Team", "beta")], 
+            by.x = c("Year", "Name1"), 
+            by.y = c("Year", "Team")) %>%
+  dplyr::rename(beta1 = beta) %>%
+  merge(dat_beta_m[, c("Year", "Team", "beta")], 
+        by.x = c("Year", "Name2"), 
+        by.y = c("Year", "Team")) %>%
+  dplyr::rename(beta2 = beta) %>%
+  merge(dat_sigma2_m, by = "Year") %>%
+  mutate(ProbWin1 = pnorm((beta1 - beta2) / Sigma)) %>%
+  group_by(Round, Seed1, Seed2) %>%
+  dplyr::summarise(N = n(),
+                   ProbWinSeed1 = mean(ProbWin1),
+                   winsSeed1 = sum(Win1), 
+                   winsSeed2 = sum(Win2)) %>%
+  mutate(ActualWinSeed1 = winsSeed1 / (winsSeed1 + winsSeed2)) %>%
+  as.data.frame()
+
+write.csv(u2, file = "matchups_actual_vs_probwin.csv", row.names = FALSE)
+
+#############################################################################
+
+v1 <- dat_ncaa_m %>%
+  group_by(Year, Round, Seed1) %>%
+  summarise(N = n()) %>%
+  rename(Seed = Seed1)
+
+v2 <- dat_ncaa_m %>%
+  group_by(Year, Round, Seed2) %>%
+  summarise(N = n()) %>%
+  rename(Seed = Seed2)
+
+v_combos <- expand.grid(Year = unique(v2$Year),
+                        Round = unique(v2$Round),
+                        Seed = 1:16)
+
+v3 <- rbind(v1, v2) %>%
+  group_by(Year, Round, Seed) %>%
+  summarise(N = sum(N)) %>%
+  right_join(v_combos, by = c("Year", "Round", "Seed")) %>%
+  arrange(Year, Round, Seed) %>%
+  as.data.frame()
+
+v3$N[is.na(v3$N)] <- 0
+
+write.csv(v3, file = "appearances_by_year_rd_seed.csv", row.names = FALSE)
+
+#############################################################################
 
 
 x1 <- dat_beta_m %>%
@@ -674,12 +817,6 @@ ggplot(dat_m_smry_plot, aes(x = Seed, y = Prob, group = Model)) + geom_line(aes(
 #   ggtitle("NCAA Men's Basketball Tournament")
 
 
-#############################################################
-drive_auth()
-drive_upload("probwin_men.png")
-drive_upload("men_smry_by_seed.csv")
-drive_upload("probwin_women.png")
-drive_upload("women_smry_by_seed.csv")
 
 
 
