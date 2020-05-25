@@ -1,23 +1,15 @@
-library(googledrive)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
 
-setwd("~/march")
+setwd("C:\\Users\\User\\Desktop\\ncaa")
 
-#read data from google drive
-options(httr_oob_default = TRUE) 
-drive_auth() 
-
-drive_download("out_tab_WBB_2018.csv", path = "out_tab_WBB_2018.csv", overwrite = TRUE)
-drive_download("ANOVA_tab_WBB_2018.csv", path = "ANOVA_tab_WBB_2018.csv", overwrite = TRUE)
-drive_download("data_NCAA_1996_2018_women.csv", path = "data_NCAA_1996_2018_women.csv", overwrite = TRUE)
-#drive_download("automaticQualifiers.csv", path = "automaticQualifiers.csv", overwrite = TRUE)
-
-dat_beta_w <- read.csv("out_tab_WBB_2018.csv")
-dat_ncaa_w <- read.csv("data_NCAA_1996_2018_women.csv")
-dat_sigma_w <- read.csv("ANOVA_tab_WBB_2018.csv")
+dat_beta_w <- read.csv("NCAA_Basketball_HCA_Analysis-master\\Women\\Output\\out_tab_WBB_2019.csv")
+dat_ncaa_w <- read.csv("data_NCAA_1996_2019_women.csv")
+dat_sigma_w <- read.csv("NCAA_Basketball_HCA_Analysis-master\\Women\\Output\\ANOVA_tab_WBB_2019.csv")
 #dat_aq <- read.csv("automaticQualifiers.csv")
+
+#names(dat_aq)[1] <- "X"
 
 #add year column to beta data
 dat_beta_w$Year <- as.numeric(gsub("....-", "", dat_beta_w$Season))
@@ -26,10 +18,10 @@ dat_beta_w$Year <- as.numeric(gsub("....-", "", dat_beta_w$Season))
 # try <- merge(dat_aq, dat_beta_w, by = c("Team", "Year"), all.x = TRUE) %>%
 #   filter(Year >= min(dat_beta_w$Year) & is.na(beta))
 
-#check for errors in tourney data
+# check for errors in tourney data
 # try <- merge(dat_ncaa_w, dat_beta_w, by.x = c("Name1", "Year"), by.y = c("Team", "Year"), all.x = TRUE) %>%
 #   filter(Year >= min(dat_beta_w$Year) & is.na(beta))
-# 
+
 # try <- merge(dat_ncaa_w, dat_beta_w, by.x = c("Name2", "Year"), by.y = c("Team", "Year"), all.x = TRUE) %>%
 #   filter(Year >= min(dat_beta_w$Year) & is.na(beta))
 
@@ -50,6 +42,16 @@ dat_sigma2_w$Year <- gsub("\\(....-", "", dat_sigma2_w$X)
 dat_sigma2_w$Year <- gsub(") Residual", "", dat_sigma2_w$Year)
 dat_sigma2_w$Sigma <- sqrt(dat_sigma2_w$MS)
 dat_sigma2_w <- data.frame(Year = as.character(dat_sigma2_w$Year), Sigma = dat_sigma2_w$Sigma)
+
+#output summary of results for first round seed matchups
+out_rd1_smry_by_year_and_seed <- dat_ncaa_w %>%
+  filter(Round == 1) %>%
+  group_by(Year, Seed1, Seed2) %>%
+  summarise(winsSeed1 = sum(Win1), winsSeed2 = sum(Win2)) %>% 
+  as.data.frame()
+
+#write.csv(out_rd1_smry_by_year_and_seed, file = "smry_rd1_wins_by_year_and_seed_w.csv")
+
 
 #create new ncaa team table
 dat_ncaa_w_teams <- rbind(dat_ncaa_w %>% 
@@ -237,6 +239,55 @@ dat_ncaa_w_results_by_seed <- dat_ncaa_w_results %>%
   spread(Round, PercWin, fill = 0) %>%
   as.data.frame()
 names(dat_ncaa_w_results_by_seed)[2:7] <- paste("Rd", names(dat_ncaa_w_results_by_seed)[2:7], sep = "")
+
+
+#code for counting matchups
+u1 <- dat_ncaa_w[dat_ncaa_w$Year >= 2002,]
+
+for(i in 1:length(u1[,1])) {
+  if(u1$Seed1[i] > u1$Seed2[i]) {
+    a1 <- u1$Seed1[i]
+    a2 <- u1$Seed2[i]
+    b1 <- u1$Name1[i]
+    b2 <- u1$Name2[i]
+    c1 <- u1$Win1[i]
+    c2 <- u1$Win2[i]
+    u1$Seed1[i] <- a2
+    u1$Seed2[i] <- a1
+    u1$Name1[i] <- b2
+    u1$Name2[i] <- b1
+    u1$Win1[i] <- c2
+    u1$Win2[i] <- c1
+  }
+}
+
+u2 <- merge(u1, dat_beta_w[, c("Year", "Team", "beta")], 
+            by.x = c("Year", "Name1"), 
+            by.y = c("Year", "Team")) %>%
+  dplyr::rename(beta1 = beta) %>%
+  merge(dat_beta_w[, c("Year", "Team", "beta")], 
+        by.x = c("Year", "Name2"), 
+        by.y = c("Year", "Team")) %>%
+  dplyr::rename(beta2 = beta) %>%
+  merge(dat_sigma2_w, by = "Year") %>%
+  mutate(ProbWin1 = pnorm((beta1 - beta2) / Sigma)) %>%
+  group_by(Round, Seed1, Seed2) %>%
+  dplyr::summarise(N = n(),
+                   ProbWinSeed1 = mean(ProbWin1),
+                   winsSeed1 = sum(Win1), 
+                   winsSeed2 = sum(Win2)) %>%
+  mutate(ActualWinSeed1 = winsSeed1 / (winsSeed1 + winsSeed2)) %>%
+  as.data.frame()
+
+write.csv(u2, file = "matchups_actual_vs_probwin_w.csv", row.names = FALSE)
+
+#############################################################################
+
+
+
+
+
+
 
 
 x1 <- dat_beta_w %>%
